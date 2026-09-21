@@ -10,13 +10,15 @@ app.use(express.json());
 // Initialize SQLite database
 const db = new Database("tasks.db");
 
-// Create tasks table if it doesn't already exist
+// Create tasks table and indexes if they do not already exist
 db.exec(`
   CREATE TABLE IF NOT EXISTS tasks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
     done INTEGER NOT NULL DEFAULT 0
   );
+  CREATE INDEX IF NOT EXISTS idx_tasks_done ON tasks(done);
+  CREATE INDEX IF NOT EXISTS idx_tasks_title ON tasks(title);
 `);
 
 // Seed three example tasks only if the table is empty
@@ -40,7 +42,7 @@ app.get("/", (req, res) => {
   res.json({
     name: "Task API",
     version: "1.0",
-    endpoints: ["/tasks"],
+    endpoints: ["/tasks", "/tasks/:id", "/health", "/stats"],
   });
 });
 
@@ -48,8 +50,51 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
+// Statistics endpoint computed with SQL aggregate functions
+app.get("/stats", (req, res) => {
+  const stats = db.prepare(`
+    SELECT
+      COUNT(*) AS total,
+      SUM(CASE WHEN done = 1 THEN 1 ELSE 0 END) AS completed,
+      SUM(CASE WHEN done = 0 THEN 1 ELSE 0 END) AS pending
+    FROM tasks
+  `).get();
+
+  res.json({
+    total: stats.total,
+    completed: stats.completed || 0,
+    pending: stats.pending || 0,
+  });
+});
+
+// List tasks with optional SQL search, status filter, and sorting
 app.get("/tasks", (req, res) => {
-  const rows = db.prepare("SELECT * FROM tasks").all();
+  let query = "SELECT * FROM tasks";
+  const conditions = [];
+  const params = [];
+
+  if (req.query.search) {
+    conditions.push("title LIKE ?");
+    params.push(`%${req.query.search}%`);
+  }
+
+  if (req.query.done !== undefined) {
+    const isDone = req.query.done === "true" || req.query.done === "1";
+    conditions.push("done = ?");
+    params.push(isDone ? 1 : 0);
+  }
+
+  if (conditions.length > 0) {
+    query += " WHERE " + conditions.join(" AND ");
+  }
+
+  if (req.query.sort === "title") {
+    query += " ORDER BY title COLLATE NOCASE ASC";
+  } else {
+    query += " ORDER BY id ASC";
+  }
+
+  const rows = db.prepare(query).all(...params);
   const tasks = rows.map((task) => ({
     id: task.id,
     title: task.title,

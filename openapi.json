@@ -53,10 +53,56 @@
         }
       }
     },
+    "/stats": {
+      "get": {
+        "summary": "Task statistics",
+        "description": "Returns aggregate statistics calculated in SQLite",
+        "responses": {
+          "200": {
+            "description": "Task statistics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "total": { "type": "integer" },
+                    "completed": { "type": "integer" },
+                    "pending": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/tasks": {
       "get": {
         "summary": "List all tasks",
-        "description": "Returns the full list of tasks",
+        "description": "Returns the full list of tasks with optional SQL filtering, search, and sorting",
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "description": "Filter tasks matching title with SQL LIKE",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "done",
+            "in": "query",
+            "required": false,
+            "description": "Filter by completion status (true or false)",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "description": "Sort tasks by column (e.g. title)",
+            "schema": { "type": "string" }
+          }
+        ],
         "responses": {
           "200": {
             "description": "List of tasks",
