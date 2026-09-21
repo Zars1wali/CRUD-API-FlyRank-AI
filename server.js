@@ -1,14 +1,14 @@
 const express = require("express");
 const swaggerUi = require("swagger-ui-express");
 const swaggerDocument = require("./openapi.json");
-
+const path = require("path");
 const Database = require("better-sqlite3");
 
 const app = express();
 app.use(express.json());
 
 // Initialize SQLite database
-const db = new Database("tasks.db");
+const db = new Database(path.join(__dirname, "tasks.db"));
 
 // Create tasks table and indexes if they do not already exist
 db.exec(`
