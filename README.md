@@ -146,12 +146,34 @@ seedTransaction(seedTasks);
 
 ---
 
-## AI vs Me — Stage 7 (Week 2 Rematch)
+## AI vs Me — Stage 6: The SQLite Rematch
 
-### Original Assignment 1 Prompt
-> Build a CRUD API for managing to-do tasks using Node.js and Express on port 3000. The API should have these endpoints: GET /tasks (list all), GET /tasks/:id (get one), POST /tasks (create, returns 201), PUT /tasks/:id (update), DELETE /tasks/:id (returns 204). Each task has id, title, and done fields. Validate input — if title is missing or empty, return 400. If a task ID doesn't exist, return 404 with a JSON error message. Use an in-memory array, pre-filled with 3 example tasks. Include a GET / endpoint returning API info and a GET /health endpoint.
+### The Prompt
+> "Migrate an existing Express CRUD task API from an in-memory array to a SQLite database using `better-sqlite3`. The database file must be named `tasks.db` and created automatically. Create a table named `tasks` with columns: `id` (integer primary key autoincrement), `title` (text not null), and `done` (boolean/integer default 0). Only if the table is empty, seed three example tasks: 'Buy groceries' (pending), 'Walk the dog' (done), and 'Read a book' (pending). Maintain exact endpoint behavior: GET /tasks, GET /tasks/:id, POST /tasks, PUT /tasks/:id, DELETE /tasks/:id, with 400 for empty or missing title, 404 for unknown IDs, and correct status codes (200, 201, 204). Use parameterized queries for all user input."
 
-### Findings from A1 Comparison
-- **What the AI did well**: Clean destructuring (`const { title } = req.body`) and standard route commenting.
-- **What the AI got wrong**: Silently dropped the `/` and `/health` endpoints, omitted Swagger docs, missed trimming on whitespace titles, and used `completed` instead of `done`.
-- **Takeaway**: AI assistants excel at standard templates but frequently make silent assumptions when constraints are not explicitly pinned down in the specification.
+---
+
+### Comparison & Code Review (`git diff --no-index server.js ai-version/server.js`)
+
+#### 1. What Did the AI Do Better?
+- **Concise Parameter Destructuring**: In `POST /tasks`, the AI concisely extracted `{ title } = req.body` directly rather than referencing `req.body.title`.
+- **Direct Default Parameter Values**: In the schema declaration, the AI cleanly specified `done INTEGER DEFAULT 0` and passed `0` directly in the query `INSERT INTO tasks (title, done) VALUES (?, 0)` for creation, simplifying the parameter binding.
+
+#### 2. What Did the AI Get Wrong or Quietly Ignore?
+- **Data Type Discrepancy (`done` Boolean vs Integer)**: SQLite does not have a native boolean type and stores booleans as `0` or `1`. The AI returned raw SQLite rows directly in `GET /tasks` (`res.json(tasks)`), returning `{"done": 0}` instead of `{"done": false}`. This quietly violates the API response contract established in Assignment 1 where `done` was a JavaScript boolean. Our hand-built version maps `Boolean(row.done)` to guarantee full backwards compatibility.
+- **No Multi-step Transaction for Seeding**: The AI inserted the seed rows with individual `insert.run(...)` calls without wrapping them in a database transaction (`db.transaction`). If an insertion failed midway, the database would be left in an inconsistent, partially-seeded state.
+- **Missing Database Indexes**: The AI did not create performance indexes on `done` or `title`, leaving any future search or filter queries subject to full table scans.
+- **Dropped Ancillary Endpoints**: The AI completely omitted `GET /`, `GET /health`, and Swagger UI (`/docs`), focusing narrowly only on the CRUD endpoints.
+- **Whitespace Validation on Update**: In `PUT /tasks/:id`, the AI updated `newTitle = title !== undefined ? title : task.title` without checking if `title.trim() === ""`, permitting empty whitespace titles to overwrite existing valid titles.
+
+#### 3. What Did My Prompt Forget to Specify — and What Did the AI Silently Decide?
+- **Boolean Serialization**: The prompt stated *"done (boolean/integer default 0)"*, which was ambiguous. The AI silently decided to return raw integers (`0`/`1`) rather than converting to booleans in the JSON response layer.
+- **Atomic Seeding**: The prompt did not explicitly mention "transaction-wrapped seeding," so the AI took the easiest path and ran sequential unbatched statements.
+- **Ancillary Routes & Swagger**: The prompt did not explicitly list the `/` info endpoint, `/health`, or Swagger UI, so the AI treated them as out of scope.
+
+---
+
+### The Rematch Prompt & What Changed
+> **Improved Prompt**: "Migrate our Express CRUD Task API to `better-sqlite3` (`tasks.db`). Keep existing `/`, `/health`, and `/docs` routes untouched. In SQLite, store `done` as `0`/`1`, but in all API JSON responses, serialize `done` as a strict JSON boolean (`true`/`false`). Wrap table seeding in an atomic `db.transaction(...)`. Create indexes on `done` and `title`. Reject whitespace-only titles on both POST and PUT with HTTP 400."
+
+**One-sentence result**: When constraints like boolean serialization, transactions, and index creation were explicitly mandated in the prompt, the AI generated production-grade code that matched our hand-built implementation almost line-for-line.
