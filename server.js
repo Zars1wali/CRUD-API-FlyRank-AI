@@ -2,15 +2,39 @@ const express = require("express");
 const swaggerUi = require("swagger-ui-express");
 const swaggerDocument = require("./openapi.json");
 
+const Database = require("better-sqlite3");
+
 const app = express();
 app.use(express.json());
 
-let tasks = [
-  { id: 1, title: "Buy groceries", done: false },
-  { id: 2, title: "Walk the dog", done: true },
-  { id: 3, title: "Read a book", done: false },
-];
-let nextId = 4;
+// Initialize SQLite database
+const db = new Database("tasks.db");
+
+// Create tasks table if it doesn't already exist
+db.exec(`
+  CREATE TABLE IF NOT EXISTS tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    done INTEGER NOT NULL DEFAULT 0
+  );
+`);
+
+// Seed three example tasks only if the table is empty
+const countResult = db.prepare("SELECT COUNT(*) AS count FROM tasks").get();
+if (countResult.count === 0) {
+  const insertTask = db.prepare("INSERT INTO tasks (title, done) VALUES (?, ?)");
+  const seedTasks = [
+    { title: "Buy groceries", done: 0 },
+    { title: "Walk the dog", done: 1 },
+    { title: "Read a book", done: 0 },
+  ];
+  const seedTransaction = db.transaction((items) => {
+    for (const item of items) {
+      insertTask.run(item.title, item.done);
+    }
+  });
+  seedTransaction(seedTasks);
+}
 
 app.get("/", (req, res) => {
   res.json({
