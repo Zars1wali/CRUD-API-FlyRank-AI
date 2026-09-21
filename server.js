@@ -40,7 +40,7 @@ if (countResult.count === 0) {
 
 app.get("/", (req, res) => {
   res.json({
-    name: "Task API",
+    name: "CRUD API FlyRank AI",
     version: "1.0",
     endpoints: ["/tasks", "/tasks/:id", "/health", "/stats"],
   });

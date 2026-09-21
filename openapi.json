@@ -1,7 +1,8 @@
 {
   "openapi": "3.0.0",
   "info": {
-    "name": "Task API",
+    "title": "CRUD API FlyRank AI",
+    "name": "CRUD API FlyRank AI",
     "version": "1.0.0",
     "description": "A simple CRUD API for managing to-do tasks"
   },

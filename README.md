@@ -1,4 +1,4 @@
-# Task API — SQLite Persistence (Week 3 / A2)
+# CRUD API FlyRank AI — SQLite Persistence (Week 3 / A2)
 
 A clean, RESTful CRUD API for managing to-do tasks, built with **Node.js**, **Express**, and **SQLite** (`better-sqlite3`).
 
