@@ -71,12 +71,17 @@ app.get("/tasks/:id", (req, res) => {
 });
 
 app.post("/tasks", (req, res) => {
-  if (!req.body.title || req.body.title.trim() === "") {
+  if (!req.body || !req.body.title || req.body.title.trim() === "") {
     return res.status(400).json({ error: "Title is required and cannot be empty" });
   }
-  const task = { id: nextId++, title: req.body.title.trim(), done: false };
-  tasks.push(task);
-  res.status(201).json(task);
+  const title = req.body.title.trim();
+  const stmt = db.prepare("INSERT INTO tasks (title, done) VALUES (?, ?)");
+  const info = stmt.run(title, 0);
+  res.status(201).json({
+    id: Number(info.lastInsertRowid),
+    title: title,
+    done: false,
+  });
 });
 
 app.put("/tasks/:id", (req, res) => {
