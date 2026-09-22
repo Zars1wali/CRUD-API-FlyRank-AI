@@ -16,8 +16,13 @@ app.get("/", (req, res) => {
   });
 });
 
-app.get("/health", (req, res) => {
-  res.json({ status: "ok" });
+app.get("/health", async (req, res) => {
+  try {
+    await db.query("SELECT 1");
+    res.json({ status: "ok", db: "connected" });
+  } catch (err) {
+    res.status(500).json({ status: "error", db: "disconnected" });
+  }
 });
 
 // Statistics endpoint computed with SQL aggregate functions
