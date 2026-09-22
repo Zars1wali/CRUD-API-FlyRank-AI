@@ -21,20 +21,24 @@ app.get("/health", (req, res) => {
 });
 
 // Statistics endpoint computed with SQL aggregate functions
-app.get("/stats", (req, res) => {
-  const stats = db.prepare(`
-    SELECT
-      COUNT(*) AS total,
-      SUM(CASE WHEN done = 1 THEN 1 ELSE 0 END) AS completed,
-      SUM(CASE WHEN done = 0 THEN 1 ELSE 0 END) AS pending
-    FROM tasks
-  `).get();
-
-  res.json({
-    total: stats.total,
-    completed: stats.completed || 0,
-    pending: stats.pending || 0,
-  });
+app.get("/stats", async (req, res) => {
+  try {
+    const statsResult = await db.query(`
+      SELECT
+        COUNT(*)::int AS total,
+        COALESCE(SUM(CASE WHEN done = TRUE THEN 1 ELSE 0 END), 0)::int AS completed,
+        COALESCE(SUM(CASE WHEN done = FALSE THEN 1 ELSE 0 END), 0)::int AS pending
+      FROM tasks;
+    `);
+    const stats = statsResult.rows[0];
+    res.json({
+      total: stats.total,
+      completed: stats.completed,
+      pending: stats.pending,
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Internal Server Error" });
+  }
 });
 
 // List tasks with optional SQL search, status filter, and sorting
@@ -84,46 +88,57 @@ app.get("/tasks/:id", async (req, res) => {
   }
 });
 
-app.post("/tasks", (req, res) => {
-  if (!req.body || !req.body.title || req.body.title.trim() === "") {
+app.post("/tasks", async (req, res) => {
+  if (!req.body || !req.body.title || typeof req.body.title !== "string" || req.body.title.trim() === "") {
     return res.status(400).json({ error: "Title is required and cannot be empty" });
   }
   const title = req.body.title.trim();
-  const stmt = db.prepare("INSERT INTO tasks (title, done) VALUES (?, ?)");
-  const info = stmt.run(title, 0);
-  res.status(201).json({
-    id: Number(info.lastInsertRowid),
-    title: title,
-    done: false,
-  });
+  try {
+    const result = await db.query(
+      "INSERT INTO tasks (title, done) VALUES ($1, $2) RETURNING *",
+      [title, false]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: "Internal Server Error" });
+  }
 });
 
-app.put("/tasks/:id", (req, res) => {
-  const task = db.prepare("SELECT * FROM tasks WHERE id = ?").get(req.params.id);
-  if (!task) {
+app.put("/tasks/:id", async (req, res) => {
+  try {
+    const existing = await db.query("SELECT * FROM tasks WHERE id = $1", [req.params.id]);
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: "Task not found" });
+    }
+    const task = existing.rows[0];
+
+    if (req.body.title !== undefined && (typeof req.body.title !== "string" || req.body.title.trim() === "")) {
+      return res.status(400).json({ error: "Title cannot be empty" });
+    }
+
+    const newTitle = req.body.title !== undefined ? req.body.title.trim() : task.title;
+    const newDone = req.body.done !== undefined ? Boolean(req.body.done) : task.done;
+
+    const result = await db.query(
+      "UPDATE tasks SET title = $1, done = $2 WHERE id = $3 RETURNING *",
+      [newTitle, newDone, req.params.id]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
     return res.status(404).json({ error: "Task not found" });
   }
-  if (req.body.title !== undefined && (typeof req.body.title !== "string" || req.body.title.trim() === "")) {
-    return res.status(400).json({ error: "Title cannot be empty" });
-  }
-  const newTitle = req.body.title !== undefined ? req.body.title.trim() : task.title;
-  const newDone = req.body.done !== undefined ? (req.body.done ? 1 : 0) : task.done;
-
-  db.prepare("UPDATE tasks SET title = ?, done = ? WHERE id = ?").run(newTitle, newDone, task.id);
-
-  res.json({
-    id: task.id,
-    title: newTitle,
-    done: Boolean(newDone),
-  });
 });
 
-app.delete("/tasks/:id", (req, res) => {
-  const info = db.prepare("DELETE FROM tasks WHERE id = ?").run(req.params.id);
-  if (info.changes === 0) {
+app.delete("/tasks/:id", async (req, res) => {
+  try {
+    const result = await db.query("DELETE FROM tasks WHERE id = $1", [req.params.id]);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Task not found" });
+    }
+    res.status(204).send();
+  } catch (err) {
     return res.status(404).json({ error: "Task not found" });
   }
-  res.status(204).send();
 });
 
 app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
