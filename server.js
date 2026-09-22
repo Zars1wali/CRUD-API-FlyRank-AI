@@ -38,51 +38,50 @@ app.get("/stats", (req, res) => {
 });
 
 // List tasks with optional SQL search, status filter, and sorting
-app.get("/tasks", (req, res) => {
-  let query = "SELECT * FROM tasks";
-  const conditions = [];
-  const params = [];
+app.get("/tasks", async (req, res) => {
+  try {
+    let sql = "SELECT * FROM tasks";
+    const conditions = [];
+    const params = [];
 
-  if (req.query.search) {
-    conditions.push("title LIKE ?");
-    params.push(`%${req.query.search}%`);
+    if (req.query.search) {
+      params.push(`%${req.query.search}%`);
+      conditions.push(`title ILIKE $${params.length}`);
+    }
+
+    if (req.query.done !== undefined) {
+      const isDone = req.query.done === "true" || req.query.done === "1";
+      params.push(isDone);
+      conditions.push(`done = $${params.length}`);
+    }
+
+    if (conditions.length > 0) {
+      sql += " WHERE " + conditions.join(" AND ");
+    }
+
+    if (req.query.sort === "title") {
+      sql += " ORDER BY title ASC";
+    } else {
+      sql += " ORDER BY id ASC";
+    }
+
+    const result = await db.query(sql, params);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: "Internal Server Error" });
   }
-
-  if (req.query.done !== undefined) {
-    const isDone = req.query.done === "true" || req.query.done === "1";
-    conditions.push("done = ?");
-    params.push(isDone ? 1 : 0);
-  }
-
-  if (conditions.length > 0) {
-    query += " WHERE " + conditions.join(" AND ");
-  }
-
-  if (req.query.sort === "title") {
-    query += " ORDER BY title COLLATE NOCASE ASC";
-  } else {
-    query += " ORDER BY id ASC";
-  }
-
-  const rows = db.prepare(query).all(...params);
-  const tasks = rows.map((task) => ({
-    id: task.id,
-    title: task.title,
-    done: Boolean(task.done),
-  }));
-  res.json(tasks);
 });
 
-app.get("/tasks/:id", (req, res) => {
-  const task = db.prepare("SELECT * FROM tasks WHERE id = ?").get(req.params.id);
-  if (!task) {
+app.get("/tasks/:id", async (req, res) => {
+  try {
+    const result = await db.query("SELECT * FROM tasks WHERE id = $1", [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Task not found" });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
     return res.status(404).json({ error: "Task not found" });
   }
-  res.json({
-    id: task.id,
-    title: task.title,
-    done: Boolean(task.done),
-  });
 });
 
 app.post("/tasks", (req, res) => {
