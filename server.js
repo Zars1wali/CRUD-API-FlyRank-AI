@@ -1,42 +1,12 @@
+require("dotenv").config();
 const express = require("express");
 const swaggerUi = require("swagger-ui-express");
 const swaggerDocument = require("./openapi.json");
-const path = require("path");
-const Database = require("better-sqlite3");
+const db = require("./db");
 
 const app = express();
 app.use(express.json());
 
-// Initialize SQLite database
-const db = new Database(path.join(__dirname, "tasks.db"));
-
-// Create tasks table and indexes if they do not already exist
-db.exec(`
-  CREATE TABLE IF NOT EXISTS tasks (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL,
-    done INTEGER NOT NULL DEFAULT 0
-  );
-  CREATE INDEX IF NOT EXISTS idx_tasks_done ON tasks(done);
-  CREATE INDEX IF NOT EXISTS idx_tasks_title ON tasks(title);
-`);
-
-// Seed three example tasks only if the table is empty
-const countResult = db.prepare("SELECT COUNT(*) AS count FROM tasks").get();
-if (countResult.count === 0) {
-  const insertTask = db.prepare("INSERT INTO tasks (title, done) VALUES (?, ?)");
-  const seedTasks = [
-    { title: "Buy groceries", done: 0 },
-    { title: "Walk the dog", done: 1 },
-    { title: "Read a book", done: 0 },
-  ];
-  const seedTransaction = db.transaction((items) => {
-    for (const item of items) {
-      insertTask.run(item.title, item.done);
-    }
-  });
-  seedTransaction(seedTasks);
-}
 
 app.get("/", (req, res) => {
   res.json({
@@ -160,7 +130,15 @@ app.delete("/tasks/:id", (req, res) => {
 app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-  console.log(`Swagger UI at http://localhost:${PORT}/docs`);
-});
+
+db.initDb()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+      console.log(`Swagger UI at http://localhost:${PORT}/docs`);
+    });
+  })
+  .catch((err) => {
+    console.error("Failed to initialize database:", err);
+    process.exit(1);
+  });
