@@ -127,3 +127,36 @@ The `GET /health` endpoint does not simply return `{ "status": "ok" }`. It execu
 Throughout Assignments 1, 2, and 3, our storage layer evolved from **In-Memory arrays** to **SQLite files** to a **Containerized PostgreSQL cluster**. 
 
 Yet, external consumers notice zero changes: the HTTP endpoints, JSON schemas, status codes, and error formats remain identical. This proves that clean APIs act as behavioral contracts, making backend storage an interchangeable implementation detail.
+
+---
+
+## 🤖 AI vs Me — Stage 6: Containerization Rematch
+
+### The Prompt
+> "Containerize our Express CRUD Task API using Docker and Docker Compose with a PostgreSQL database. Package the application in a Dockerfile using Node and configure `compose.yaml` with two services: the API and the database (`postgres`). Use a persistent named volume for Postgres data so it survives restarts. Inject the database credentials via environment variables (`DATABASE_URL`). Implement auto-table creation on startup and seed three example tasks ('Buy groceries', 'Walk the dog' [done], 'Read a book') only if the table is empty. Maintain identical CRUD behavior, parameterized queries, and status codes."
+
+---
+
+### Code Review & Comparison (`git diff --no-index server.js ai-version/server.js`)
+
+#### 1. What Did the AI Do Better?
+- **Single-Statement Atomic Insert**: When seeding the starter tasks, the AI chained values together into a single SQL statement (`INSERT INTO tasks (title, done) VALUES (...), (...), (...)`), avoiding multiple network round-trips.
+- **Concise Parameter Coalescing**: In `PUT /tasks/:id`, the AI leveraged SQL `COALESCE($1, title)` to handle partial field updates cleanly in a single query.
+
+#### 2. What Did the AI Get Wrong or Ignore?
+- **Startup Race Condition (`depends_on` without health check)**: The AI simply specified `depends_on: [postgres]`. In Docker Compose, `depends_on` only waits until the Postgres container starts, **not** until the database engine is actually ready to accept socket connections. Without `condition: service_healthy`, the API container crashes on initial startup.
+- **Bloated Base Image**: The AI selected `node:20` (a full Debian-based image weighing ~1.1 GB) instead of Alpine Linux (`node:22-alpine` weighing ~180 MB), drastically inflating image size and attack surface.
+- **No Repository Layer Separation**: The AI mashed raw database pool creation, table migrations, and SQL queries directly into route files rather than maintaining an isolated repository layer (`db.js`).
+- **Whitespace Validation Bug**: The AI used `if (!title)` which fails to reject whitespace-only titles like `"   "`, returning 201 instead of the required 400 Bad Request.
+- **Dropped Swagger & Health Endpoints**: The AI completely omitted Swagger UI (`/docs`), API metadata (`/`), and database health checks (`/health`).
+
+#### 3. What Did the Prompt Forget to Specify — and What Did the AI Silently Decide?
+- **Service Readiness**: The prompt said "start with docker compose," but omitted readiness synchronization. The AI silently assumed standard `depends_on` was sufficient.
+- **Base Image Footprint**: The prompt did not mandate Alpine, so the AI defaulted to full Node.
+
+---
+
+### The Rematch Prompt & What Changed
+> **Improved Prompt**: "Containerize our Express CRUD Task API using `node:22-alpine` and `postgres:16-alpine`. In `compose.yaml`, define a `healthcheck` on the database (`pg_isready`) and configure the API service with `depends_on: db: condition: service_healthy`. Extract all database operations into a repository module `db.js`. Reject whitespace titles on both POST and PUT with HTTP 400. Include `/health` verifying live `SELECT 1` database connectivity."
+
+**Result**: With readiness probes, Alpine base images, and input sanitization explicitly constrained, the AI generated a rock-solid, production-ready compose configuration that passed every health check on the first boot.
