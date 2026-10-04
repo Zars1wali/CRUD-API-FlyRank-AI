@@ -97,7 +97,8 @@ app.get("/public/info", (req, res) => {
   res.status(200).json({ message: "Welcome stranger! This info is public." });
 });
 
-app.get("/protected/profile", async (req, res) => {
+// --- Stage 4: Reusable Auth Middleware Guard ---
+async function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return res.status(401).json({ error: "Access token required" });
@@ -118,15 +119,42 @@ app.get("/protected/profile", async (req, res) => {
       return res.status(401).json({ error: "Invalid or expired token" });
     }
 
-    return res.status(200).json({
-      id: user.id,
-      email: user.email,
-      created_at: user.created_at,
-    });
+    req.user = user;
+    req.token = token;
+    next();
   } catch (err) {
     return res.status(401).json({ error: "Invalid or expired token" });
   }
+}
+
+// Stage 4: Reusable protected profile route
+app.get("/protected/profile", requireAuth, (req, res) => {
+  res.status(200).json({
+    id: req.user.id,
+    email: req.user.email,
+    created_at: req.user.created_at,
+  });
 });
+
+// Stage 4 Checkpoint: Second protected route proving middleware reuse
+app.get("/protected/dashboard", requireAuth, (req, res) => {
+  res.status(200).json({
+    message: `Hello ${req.user.email}, welcome to your protected dashboard!`,
+    user_id: req.user.id,
+    created_at: req.user.created_at,
+  });
+});
+
+// Stage 4: Logout endpoint (protected)
+app.post("/auth/logout", requireAuth, async (req, res) => {
+  try {
+    await supabase.auth.signOut();
+    return res.status(204).send();
+  } catch (err) {
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
 
 
 
