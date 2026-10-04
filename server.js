@@ -8,6 +8,14 @@ const supabase = require("./supabaseClient");
 const app = express();
 app.use(express.json());
 
+// Catch malformed JSON bodies and return clean JSON 400
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && "body" in err) {
+    return res.status(400).json({ error: "Invalid JSON payload" });
+  }
+  next(err);
+});
+
 
 app.get("/", (req, res) => {
   res.json({
