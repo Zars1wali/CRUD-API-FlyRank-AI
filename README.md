@@ -1,9 +1,10 @@
-# CRUD API FlyRank AI — Containerized PostgreSQL Stack (Week 1 / A3)
+# CRUD API FlyRank AI — Auth · Login & Protect (Week 2 / A4)
 
 <div align="center">
 
 [![NodeJS](https://img.shields.io/badge/node.js-%236DA55F.svg?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![Express.js](https://img.shields.io/badge/express.js-%23404d59.svg?style=for-the-badge&logo=express&logoColor=%2361DAFB)](https://expressjs.com/)
+[![Supabase](https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)](https://supabase.com/)
 [![PostgreSQL](https://img.shields.io/badge/postgres-%23316192.svg?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
 [![Swagger](https://img.shields.io/badge/-Swagger-%23Clojure?style=for-the-badge&logo=swagger&logoColor=white)](https://swagger.io/)
@@ -11,164 +12,192 @@
 
 </div>
 
+A production-grade, secure RESTful API built with **Node.js**, **Express**, and **Supabase Auth** as the trusted Identity Provider (IdP). This assignment transitions our API from an open prototype into a gated, production-ready system where every sensitive route verifies cryptographic JSON Web Tokens (JWTs).
 
-A production-grade, containerized RESTful CRUD API for managing tasks, built with **Node.js**, **Express**, **PostgreSQL**, and **Docker Compose**.
-
-This assignment marks the third milestone in our storage ladder:
-1. **Assignment 1**: In-Memory Array (`tasks = [...]`) — lost upon process termination.
-2. **Assignment 2**: Embedded SQLite (`tasks.db`) — persistent disk file, single-machine embedded storage.
-3. **Assignment 3 (This project)**: Enterprise PostgreSQL server running inside an isolated Docker container with named volume persistence, environment-based configuration, and unified multi-container orchestration.
 
 ---
 
-## ⚡ One Command to Run Everything
+## ⚡ The Big Idea & The Trust Triangle
 
-Clone the repository and run:
+Authentication in modern backend architectures relies on a trust triangle between the **Client**, your **Backend Server**, and the **Identity Provider (Supabase Auth)**:
 
-```bash
-cp .env.example .env
-docker compose up -d --build
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client
+    participant Server as Backend Server (Express)
+    participant Supabase as Supabase Auth (IdP)
+
+    Note over Client,Supabase: 1. Sign Up / Log In Flow
+    Client->>Server: POST /auth/signup or /auth/login (email, password)
+    Server->>Supabase: supabase.auth.signUp() or signInWithPassword()
+    Supabase-->>Server: User object + Signed JWT (access_token & refresh_token)
+    Server-->>Client: 201 Created (Signup) / 200 OK with access_token (Login)
+
+    Note over Client,Supabase: 2. Protected Resource Access Flow
+    Client->>Server: GET /protected/profile (Authorization: Bearer <token>)
+    Server->>Server: Extract token from header
+    Server->>Supabase: supabase.auth.getUser(token)
+    alt Token is valid
+        Supabase-->>Server: User metadata (id, email, created_at)
+        Server-->>Client: 200 OK + User Profile JSON
+    else Token is missing/malformed
+        Server-->>Client: 401 Unauthorized {"error": "Access token required"}
+    else Token is invalid/tampered/expired
+        Server-->>Client: 401 Unauthorized {"error": "Invalid or expired token"}
+    end
 ```
 
-That's it! Docker Compose will:
-1. Build the Node.js application container from `Dockerfile`.
-2. Pull and boot the official `postgres:16-alpine` database image.
-3. Attach the persistent named volume (`taskdata`).
-4. Wait for PostgreSQL to become fully healthy before launching the API container.
-5. Automatically create the `tasks` schema and seed the initial 3 tasks if empty.
-6. Expose the API on `http://localhost:3000` and PostgreSQL on `localhost:5432`.
+### The Golden Rule
+> **Never store plain passwords and never write custom password-hashing code.**  
+> Supabase stores account credentials, hashes passwords with industry-standard cryptography, and signs JWTs. The backend's responsibility is solely to receive tokens, verify signatures against Supabase, and grant or deny access.
 
+---
+
+## 🚀 Quickstart: One Command to Run Everything
+
+```bash
+# 1. Clone the repository and install dependencies
+git clone https://github.com/Zars1wali/CRUD-API-FlyRank-AI.git
+cd CRUD-API-FlyRank-AI
+npm install
+
+# 2. Configure environment secrets
+cp .env.example .env
+# Edit .env with your SUPABASE_URL and SUPABASE_KEY (anon key)
+
+# 3. Start the API server
+npm start
+```
+
+The server starts immediately at **http://localhost:3000** and connects to Supabase Auth.
 - **Interactive Swagger Documentation**: [http://localhost:3000/docs](http://localhost:3000/docs)
 
 ---
 
-## 🔐 Environment Variables & Secrets
+## 🔐 Environment Variables & Secrets Configuration
 
-Configuration and database secrets are injected via environment variables. Copy the provided `.env.example` to `.env`:
+All sensitive configuration and Identity Provider keys are loaded via environment variables using `dotenv`.
+
+Copy `.env.example` to `.env`:
 
 ```bash
 cp .env.example .env
 ```
 
-| Variable | Description | Example (Local Dev) | Docker Compose Default |
-|---|---|---|---|
-| `DATABASE_URL` | PostgreSQL connection string | `postgres://postgres:dev@localhost:5432/tasks` | `postgres://postgres:dev@db:5432/tasks` |
-| `PORT` | API server listen port | `3000` | `3000` |
+| Variable | Description | Example |
+| :--- | :--- | :--- |
+| `SUPABASE_URL` | Your Supabase Project URL | `https://your-project.supabase.co` |
+| `SUPABASE_KEY` | Supabase Public `anon` key | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` |
+| `PORT` | API server listen port | `3000` |
+| `DATABASE_URL` | (Optional) PostgreSQL connection string from A3 | `postgres://postgres:dev@localhost:5432/tasks` |
 
-> **Security Rule**: `.env` is strictly git-ignored to prevent credential leaks. Never commit live passwords to version control.
+> **Security Guardrail**: `.env` is listed in `.gitignore` and must **never** be committed to version control. Only public `anon` keys are used in client contexts; the `service_role` key is strictly forbidden here as it bypasses Row Level Security.
 
 ---
 
-## 📸 Database Verification in Docker
+## 🔌 API Endpoint Reference Table
 
-The running PostgreSQL database was inspected inside the container using `psql`:
+| Route | HTTP Verb | Purpose | Auth Required | Success Status | Error Statuses |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `/public/info` | `GET` | Open public information | None | `200 OK` | — |
+| `/auth/signup` | `POST` | Register a new user | None | `201 Created` | `400 Bad Request` |
+| `/auth/login` | `POST` | Authenticate credentials & get JWT | None | `200 OK` | `400 Bad Request`, `401 Unauthorized` |
+| `/auth/logout` | `POST` | Invalidate user session | `Bearer <token>` | `204 No Content`| `401 Unauthorized` |
+| `/protected/profile` | `GET` | Retrieve private profile metadata | `Bearer <token>` | `200 OK` | `401 Unauthorized` |
+| `/protected/dashboard`| `GET` | Protected user dashboard (middleware test) | `Bearer <token>` | `200 OK` | `401 Unauthorized` |
+| `/protected/admin` | `GET` | Admin-only route (**403 demonstration**) | `Bearer <token>` | `200 OK` | `401 Unauthorized`, `403 Forbidden` |
 
-![PostgreSQL Database Screenshot](postgres-db-screenshot.png)
+---
 
-```text
-tasks=# \dt
-        List of relations
- Schema | Name  | Type  |  Owner   
---------+-------+-------+----------
- public | tasks | table | postgres
-(1 row)
+## 🛡️ Authentication vs. Authorization (401 vs. 403)
 
-tasks=# SELECT * FROM tasks;
- id |     title     | done 
-----+---------------+------
-  1 | Buy groceries | f
-  2 | Walk the dog  | t
-  3 | Read a book   | f
-(3 rows)
+Our API clearly distinguishes between **Authentication** and **Authorization**:
+
+| Concept | Status Code | Meaning | Analogy |
+| :--- | :--- | :--- | :--- |
+| **Authentication** | `401 Unauthorized` | *"I don't know who you are."* The request is missing a token, the format is malformed, or the token is expired/forged. | Showing up at the building gate without an ID badge. |
+| **Authorization** | `403 Forbidden` | *"I know who you are, but you are not allowed in here."* The user presented a valid, verified token, but does not possess the required role (e.g. non-admin attempting to access `/protected/admin`). | An employee with a valid badge trying to enter the CEO's private vault. |
+
+---
+
+## 📸 Interactive Swagger UI with Bearer Authentication
+
+The interactive API documentation is served at `/docs` using `swagger-ui-express` and an OpenAPI 3.0 specification configured with `securitySchemes` for HTTP Bearer JWT:
+
+![Swagger UI with Bearer Auth](swagger-auth-screenshot.png)
+
+### Testing in the Browser
+1. Navigate to [http://localhost:3000/docs](http://localhost:3000/docs).
+2. Click the **Authorize** button (padlock icon) at the top right.
+3. Paste the JWT `access_token` obtained from `POST /auth/login`.
+4. Click **Authorize**, then click **Close**.
+5. Test any locked route (e.g., `GET /protected/profile` or `GET /protected/dashboard`) with the **Try it out** button!
+
+---
+
+## 🧪 Terminal Verification with `curl`
+
+### 1. Register a New Account (`201 Created`)
+```bash
+curl -i -X POST http://localhost:3000/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{"email":"student@flyrank.ai","password":"Password123!"}'
+```
+
+### 2. Validation Guardrail (`400 Bad Request`)
+```bash
+curl -i -X POST http://localhost:3000/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{"email":"student@flyrank.ai"}'
+```
+
+### 3. Log In to Receive JWT (`200 OK`)
+```bash
+curl -i -X POST http://localhost:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"student@flyrank.ai","password":"Password123!"}'
+```
+*Response returns `{ "access_token": "...", "refresh_token": "..." }`.*
+
+### 4. Access Protected Profile with Valid Token (`200 OK`)
+```bash
+curl -i http://localhost:3000/protected/profile \
+  -H "Authorization: Bearer <PASTE_YOUR_ACCESS_TOKEN>"
+```
+
+### 5. Verify Token Rejection with Tampered Token (`401 Unauthorized`)
+```bash
+# Change a single character in the token:
+curl -i http://localhost:3000/protected/profile \
+  -H "Authorization: Bearer <TAMPERED_TOKEN>"
+```
+
+### 6. Verify 403 Forbidden on Admin Endpoint (`403 Forbidden`)
+```bash
+curl -i http://localhost:3000/protected/admin \
+  -H "Authorization: Bearer <STANDARD_USER_ACCESS_TOKEN>"
+```
+
+### 7. End Session (`204 No Content`)
+```bash
+curl -i -X POST http://localhost:3000/auth/logout \
+  -H "Authorization: Bearer <PASTE_YOUR_ACCESS_TOKEN>"
 ```
 
 ---
 
-## 🔌 API Endpoints
+## 📜 Stage Commit History
 
-| Method | Endpoint | Description | Status Codes |
-|---|---|---|---|
-| `GET` | `/` | API service metadata | `200` |
-| `GET` | `/health` | Deep health check (verifies live Postgres `SELECT 1`) | `200`, `500` |
-| `GET` | `/stats` | Task statistics aggregated via SQL (`COUNT`, `SUM`) | `200`, `500` |
-| `GET` | `/tasks` | List tasks (supports `?search=`, `?done=`, `?sort=`) | `200`, `500` |
-| `GET` | `/tasks/:id` | Retrieve a single task by ID | `200`, `404` |
-| `POST` | `/tasks` | Create a new task (`{ "title": "..." }`) | `201`, `400` |
-| `PUT` | `/tasks/:id` | Update task title and/or done status | `200`, `400`, `404` |
-| `DELETE` | `/tasks/:id` | Delete task by ID | `204`, `404` |
-
-### Sample `curl -i` Verification
+This repository demonstrates incremental, verifiable git commits:
 
 ```text
-$ curl -i http://localhost:3000/tasks/1
-
-HTTP/1.1 200 OK
-Content-Type: application/json; charset=utf-8
-Content-Length: 46
-Date: Tue, 22 Sep 2026 21:05:00 GMT
-Connection: keep-alive
-
-{"id":1,"title":"Buy groceries","done":false}
+* Stage 6: publish to GitHub and write README — then push everything
+* Extras: add 403 Forbidden admin route and documentation
+* Stage 5: Swagger UI documentation with bearer auth
+* Stage 4: auth middleware and logout endpoint
+* Stage 3: profile route token verification
+* Stage 2: public route and unverified protected route
+* Stage 1: signup and login routes working
+* Stage 0: setup server and supabase client
 ```
-
-```text
-$ curl -i http://localhost:3000/tasks/999
-
-HTTP/1.1 404 Not Found
-Content-Type: application/json; charset=utf-8
-Content-Length: 27
-Date: Tue, 22 Sep 2026 21:05:02 GMT
-Connection: keep-alive
-
-{"error":"Task not found"}
-```
-
----
-
-## 🧠 Core Engineering Principles
-
-### 1. Why Volumes Exist (The Mortality Experiment)
-Containers are inherently ephemeral. If you run a PostgreSQL container without a volume, create database rows, and execute `docker rm -f <container>`, all written data is permanently destroyed when the container's writable layer is erased. 
-
-Named volumes (`taskdata:/var/lib/postgresql/data`) decouple storage from the container lifecycle. When containers are restarted, destroyed, or upgraded (`docker compose down` then `up`), the volume remains on host disk, guaranteeing 100% data persistence.
-
-### 2. Deep Health Checks
-The `GET /health` endpoint does not simply return `{ "status": "ok" }`. It executes `SELECT 1;` against PostgreSQL to confirm real end-to-end database connectivity. In production systems, load balancers and Kubernetes readiness probes use this exact check to avoid routing customer traffic to instances with severed database connections.
-
-### 3. Storage as an Implementation Detail
-Throughout Assignments 1, 2, and 3, our storage layer evolved from **In-Memory arrays** to **SQLite files** to a **Containerized PostgreSQL cluster**. 
-
-Yet, external consumers notice zero changes: the HTTP endpoints, JSON schemas, status codes, and error formats remain identical. This proves that clean APIs act as behavioral contracts, making backend storage an interchangeable implementation detail.
-
----
-
-## 🤖 AI vs Me — Stage 6: Containerization Rematch
-
-### The Prompt
-> "Containerize our Express CRUD Task API using Docker and Docker Compose with a PostgreSQL database. Package the application in a Dockerfile using Node and configure `compose.yaml` with two services: the API and the database (`postgres`). Use a persistent named volume for Postgres data so it survives restarts. Inject the database credentials via environment variables (`DATABASE_URL`). Implement auto-table creation on startup and seed three example tasks ('Buy groceries', 'Walk the dog' [done], 'Read a book') only if the table is empty. Maintain identical CRUD behavior, parameterized queries, and status codes."
-
----
-
-### Code Review & Comparison (`git diff --no-index server.js ai-version/server.js`)
-
-#### 1. What Did the AI Do Better?
-- **Single-Statement Atomic Insert**: When seeding the starter tasks, the AI chained values together into a single SQL statement (`INSERT INTO tasks (title, done) VALUES (...), (...), (...)`), avoiding multiple network round-trips.
-- **Concise Parameter Coalescing**: In `PUT /tasks/:id`, the AI leveraged SQL `COALESCE($1, title)` to handle partial field updates cleanly in a single query.
-
-#### 2. What Did the AI Get Wrong or Ignore?
-- **Startup Race Condition (`depends_on` without health check)**: The AI simply specified `depends_on: [postgres]`. In Docker Compose, `depends_on` only waits until the Postgres container starts, **not** until the database engine is actually ready to accept socket connections. Without `condition: service_healthy`, the API container crashes on initial startup.
-- **Bloated Base Image**: The AI selected `node:20` (a full Debian-based image weighing ~1.1 GB) instead of Alpine Linux (`node:22-alpine` weighing ~180 MB), drastically inflating image size and attack surface.
-- **No Repository Layer Separation**: The AI mashed raw database pool creation, table migrations, and SQL queries directly into route files rather than maintaining an isolated repository layer (`db.js`).
-- **Whitespace Validation Bug**: The AI used `if (!title)` which fails to reject whitespace-only titles like `"   "`, returning 201 instead of the required 400 Bad Request.
-- **Dropped Swagger & Health Endpoints**: The AI completely omitted Swagger UI (`/docs`), API metadata (`/`), and database health checks (`/health`).
-
-#### 3. What Did the Prompt Forget to Specify — and What Did the AI Silently Decide?
-- **Service Readiness**: The prompt said "start with docker compose," but omitted readiness synchronization. The AI silently assumed standard `depends_on` was sufficient.
-- **Base Image Footprint**: The prompt did not mandate Alpine, so the AI defaulted to full Node.
-
----
-
-### The Rematch Prompt & What Changed
-> **Improved Prompt**: "Containerize our Express CRUD Task API using `node:22-alpine` and `postgres:16-alpine`. In `compose.yaml`, define a `healthcheck` on the database (`pg_isready`) and configure the API service with `depends_on: db: condition: service_healthy`. Extract all database operations into a repository module `db.js`. Reject whitespace titles on both POST and PUT with HTTP 400. Include `/health` verifying live `SELECT 1` database connectivity."
-
-**Result**: With readiness probes, Alpine base images, and input sanitization explicitly constrained, the AI generated a rock-solid, production-ready compose configuration that passed every health check on the first boot.
