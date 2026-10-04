@@ -13,9 +13,85 @@ app.get("/", (req, res) => {
   res.json({
     name: "CRUD API FlyRank AI",
     version: "1.0",
-    endpoints: ["/tasks", "/tasks/:id", "/health", "/stats"],
+    endpoints: [
+      "/tasks",
+      "/tasks/:id",
+      "/health",
+      "/stats",
+      "/auth/signup",
+      "/auth/login",
+      "/auth/logout",
+      "/public/info",
+      "/protected/profile",
+      "/protected/dashboard",
+    ],
   });
 });
+
+// --- Stage 1: Open auth: Sign Up & Log In ---
+app.post("/auth/signup", async (req, res) => {
+  const { email, password } = req.body || {};
+
+  if (
+    !email ||
+    !password ||
+    typeof email !== "string" ||
+    typeof password !== "string" ||
+    !email.trim() ||
+    !password.trim()
+  ) {
+    return res.status(400).json({ error: "Email and password are required" });
+  }
+
+  try {
+    const { data, error } = await supabase.auth.signUp({
+      email: email.trim(),
+      password: password.trim(),
+    });
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    return res.status(201).json(data.user);
+  } catch (err) {
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+app.post("/auth/login", async (req, res) => {
+  const { email, password } = req.body || {};
+
+  if (
+    !email ||
+    !password ||
+    typeof email !== "string" ||
+    typeof password !== "string" ||
+    !email.trim() ||
+    !password.trim()
+  ) {
+    return res.status(400).json({ error: "Email and password are required" });
+  }
+
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password: password.trim(),
+    });
+
+    if (error || !data.session) {
+      return res.status(401).json({ error: "Invalid login credentials" });
+    }
+
+    return res.status(200).json({
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
 
 app.get("/health", async (req, res) => {
   try {
