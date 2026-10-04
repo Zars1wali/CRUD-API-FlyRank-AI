@@ -1,5 +1,6 @@
 node_modules/
 .env
+.agent-logs/
 tasks.db
 tasks.db-journal
 tasks.db-wal

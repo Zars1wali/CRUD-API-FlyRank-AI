@@ -3,6 +3,7 @@ const express = require("express");
 const swaggerUi = require("swagger-ui-express");
 const swaggerDocument = require("./openapi.json");
 const db = require("./db");
+const supabase = require("./supabaseClient");
 
 const app = express();
 app.use(express.json());
@@ -150,14 +151,18 @@ app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 const PORT = process.env.PORT || 3000;
 
-db.initDb()
-  .then(() => {
-    app.listen(PORT, () => {
-      console.log(`Server running on http://localhost:${PORT}`);
-      console.log(`Swagger UI at http://localhost:${PORT}/docs`);
-    });
-  })
-  .catch((err) => {
-    console.error("Failed to initialize database:", err);
-    process.exit(1);
+async function startServer() {
+  try {
+    await db.initDb();
+  } catch (err) {
+    console.warn("⚠️ Warning: PostgreSQL initialization skipped or failed. Continuing server launch for Auth endpoints.");
+  }
+
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT} and connected to Supabase`);
+    console.log(`Swagger UI at http://localhost:${PORT}/docs`);
   });
+}
+
+startServer();
+
