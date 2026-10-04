@@ -145,6 +145,25 @@ app.get("/protected/dashboard", requireAuth, (req, res) => {
   });
 });
 
+// --- Extras: 403 Forbidden Admin Route (Authentication vs Authorization) ---
+app.get("/protected/admin", requireAuth, (req, res) => {
+  const isAdmin =
+    req.user.app_metadata?.role === "admin" ||
+    req.user.user_metadata?.role === "admin" ||
+    (req.user.email && req.user.email.endsWith("@admin.com"));
+
+  if (!isAdmin) {
+    return res.status(403).json({
+      error: "Forbidden: You are authenticated, but you lack admin privileges.",
+    });
+  }
+
+  return res.status(200).json({
+    message: "Welcome to the Admin Console.",
+    admin_user: req.user.email,
+  });
+});
+
 // Stage 4: Logout endpoint (protected)
 app.post("/auth/logout", requireAuth, async (req, res) => {
   try {
@@ -154,6 +173,7 @@ app.post("/auth/logout", requireAuth, async (req, res) => {
     return res.status(500).json({ error: "Internal Server Error" });
   }
 });
+
 
 
 
