@@ -1,5 +1,6 @@
 const express = require("express");
 const { TriageInputSchema, TriageOutputSchema, STUB_OUTPUT } = require("../llm/schema");
+const { callModel } = require("../llm/service");
 
 const router = express.Router();
 
@@ -20,7 +21,13 @@ router.post("/", async (req, res) => {
     return res.status(200).json(STUB_OUTPUT);
   }
 
-  return res.status(200).json(STUB_OUTPUT);
+  // 3. Stage 2: Call model with versioned prompt
+  try {
+    const result = await callModel(req.body.text);
+    return res.status(200).send(result.content);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;
