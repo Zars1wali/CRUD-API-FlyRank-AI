@@ -509,6 +509,75 @@
           }
         }
       }
+    },
+    "/triage": {
+      "post": {
+        "tags": ["AI Triage"],
+        "summary": "Classify support message or task inquiry",
+        "description": "Takes an unstructured support message or task description, queries a Large Language Model with strict schema validation and 1-shot repair, and returns structured JSON.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TriageInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successfully classified support message into structured JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TriageOutput"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation Error - Malformed or missing required input fields",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity - Model output failed schema validation after repair retry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Degraded - Administrative kill switch active (LLM_ENABLED=false)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout - Upstream model request exceeded 30 seconds limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -587,8 +656,47 @@
         "properties": {
           "error": { "type": "string" }
         }
+      },
+      "TriageInput": {
+        "type": "object",
+        "required": ["text"],
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "example": "Payment failed on checkout with error 402."
+          }
+        }
+      },
+      "TriageOutput": {
+        "type": "object",
+        "required": ["category", "urgency", "confidence", "reason"],
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": ["billing", "bug", "feature", "other"],
+            "example": "billing"
+          },
+          "urgency": {
+            "type": "string",
+            "enum": ["low", "normal", "high"],
+            "example": "high"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0,
+            "example": 0.95
+          },
+          "reason": {
+            "type": "string",
+            "example": "Customer reported card charge failure at checkout."
+          }
+        }
       }
     }
   }
 }
+
 

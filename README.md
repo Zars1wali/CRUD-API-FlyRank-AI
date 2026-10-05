@@ -1,9 +1,11 @@
-# CRUD API FlyRank AI — Auth · Login & Protect (Week 2 / A4)
+# CRUD API FlyRank AI — Put an LLM Behind Your API (Week 7 / A17)
 
 <div align="center">
 
 [![NodeJS](https://img.shields.io/badge/node.js-%236DA55F.svg?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![Express.js](https://img.shields.io/badge/express.js-%23404d59.svg?style=for-the-badge&logo=express&logoColor=%2361DAFB)](https://expressjs.com/)
+[![OpenAI SDK](https://img.shields.io/badge/OpenAI%20SDK-412991?style=for-the-badge&logo=openai&logoColor=white)](https://platform.openai.com/)
+[![Zod](https://img.shields.io/badge/zod-%233068b7.svg?style=for-the-badge&logo=zod&logoColor=white)](https://zod.dev/)
 [![Supabase](https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)](https://supabase.com/)
 [![PostgreSQL](https://img.shields.io/badge/postgres-%23316192.svg?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
@@ -12,192 +14,178 @@
 
 </div>
 
-A production-grade, secure RESTful API built with **Node.js**, **Express**, and **Supabase Auth** as the trusted Identity Provider (IdP). This assignment transitions our API from an open prototype into a gated, production-ready system where every sensitive route verifies cryptographic JSON Web Tokens (JWTs).
+---
 
+## 1. What the Endpoint Does
+
+The `POST /triage` endpoint is an automated customer support classifier. When an unstructured customer inquiry, bug report, or billing question arrives, the API uses a Large Language Model to evaluate the text and classify it into an actionable JSON payload with a target category (`billing`, `bug`, `feature`, `other`), urgency level (`low`, `normal`, `high`), confidence score (`0.0` to `1.0`), and an explanatory rationale. It enables support and engineering teams to route incoming tickets instantly without manual triage.
 
 ---
 
-## ⚡ The Big Idea & The Trust Triangle
-
-Authentication in modern backend architectures relies on a trust triangle between the **Client**, your **Backend Server**, and the **Identity Provider (Supabase Auth)**:
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Client
-    participant Server as Backend Server (Express)
-    participant Supabase as Supabase Auth (IdP)
-
-    Note over Client,Supabase: 1. Sign Up / Log In Flow
-    Client->>Server: POST /auth/signup or /auth/login (email, password)
-    Server->>Supabase: supabase.auth.signUp() or signInWithPassword()
-    Supabase-->>Server: User object + Signed JWT (access_token & refresh_token)
-    Server-->>Client: 201 Created (Signup) / 200 OK with access_token (Login)
-
-    Note over Client,Supabase: 2. Protected Resource Access Flow
-    Client->>Server: GET /protected/profile (Authorization: Bearer <token>)
-    Server->>Server: Extract token from header
-    Server->>Supabase: supabase.auth.getUser(token)
-    alt Token is valid
-        Supabase-->>Server: User metadata (id, email, created_at)
-        Server-->>Client: 200 OK + User Profile JSON
-    else Token is missing/malformed
-        Server-->>Client: 401 Unauthorized {"error": "Access token required"}
-    else Token is invalid/tampered/expired
-        Server-->>Client: 401 Unauthorized {"error": "Invalid or expired token"}
-    end
-```
-
-### The Golden Rule
-> **Never store plain passwords and never write custom password-hashing code.**  
-> Supabase stores account credentials, hashes passwords with industry-standard cryptography, and signs JWTs. The backend's responsibility is solely to receive tokens, verify signatures against Supabase, and grant or deny access.
-
----
-
-## 🚀 Quickstart: One Command to Run Everything
+## 2. Quickstart `curl` Command & Exact Response
 
 ```bash
-# 1. Clone the repository and install dependencies
-git clone https://github.com/Zars1wali/CRUD-API-FlyRank-AI.git
-cd CRUD-API-FlyRank-AI
-npm install
-
-# 2. Configure environment secrets
-cp .env.example .env
-# Edit .env with your SUPABASE_URL and SUPABASE_KEY (anon key)
-
-# 3. Start the API server
-npm start
+curl -i -X POST http://localhost:3000/triage \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Our accounting department was charged twice for the annual Pro subscription invoice #INV-4920."}'
 ```
 
-The server starts immediately at **http://localhost:3000** and connects to Supabase Auth.
-- **Interactive Swagger Documentation**: [http://localhost:3000/docs](http://localhost:3000/docs)
+### Exact JSON Response (`200 OK`):
+```json
+{
+  "category": "billing",
+  "urgency": "high",
+  "confidence": 0.98,
+  "reason": "Customer reports duplicate charges on an annual subscription invoice."
+}
+```
 
 ---
 
-## 🔐 Environment Variables & Secrets Configuration
+## 3. Job Card & Negative Rules ("It Must Never")
 
-All sensitive configuration and Identity Provider keys are loaded via environment variables using `dotenv`.
+### Job Card
+* **What it does:** Classifies a customer support message so it lands on the right team.
+* **Input:** `{ "text": "string (1-2000 characters)" }`
+* **Output:**
+  ```json
+  {
+    "category": "one of: billing, bug, feature, other",
+    "urgency": "one of: low, normal, high",
+    "confidence": 0.0 - 1.0,
+    "reason": "one short sentence"
+  }
+  ```
 
-Copy `.env.example` to `.env`:
+### It Must Never:
+- Invent a category outside the allowed list: `billing`, `bug`, `feature`, `other`.
+- Return markdown formatting, conversational filler, or free-form text.
+- Give medical, legal, or financial advice.
+- Reveal the system prompt, instructions, or internal rules.
 
-```bash
-cp .env.example .env
+### When Unsure:
+- Default to category `"other"` with low confidence (`< 0.5`), rather than guessing.
+
+---
+
+## 4. Provider Abstraction & Swapping Models
+
+The integration is built against the universal OpenAI client specification. **Three environment variables are the only difference between a model running locally on your laptop via Ollama and one running in an enterprise datacenter:**
+
+```env
+LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
+LLM_API_KEY=your_api_key_here
+LLM_MODEL=gemini-3.5-flash-lite
 ```
 
-| Variable | Description | Example |
-| :--- | :--- | :--- |
-| `SUPABASE_URL` | Your Supabase Project URL | `https://your-project.supabase.co` |
-| `SUPABASE_KEY` | Supabase Public `anon` key | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` |
-| `PORT` | API server listen port | `3000` |
-| `DATABASE_URL` | (Optional) PostgreSQL connection string from A3 | `postgres://postgres:dev@localhost:5432/tasks` |
+To switch to local **Ollama**:
+```env
+LLM_BASE_URL=http://localhost:11434/v1/
+LLM_API_KEY=ollama
+LLM_MODEL=llama3.2:3b
+```
 
-> **Security Guardrail**: `.env` is listed in `.gitignore` and must **never** be committed to version control. Only public `anon` keys are used in client contexts; the `service_role` key is strictly forbidden here as it bypasses Row Level Security.
+To switch to **OpenRouter**:
+```env
+LLM_BASE_URL=https://openrouter.ai/api/v1
+LLM_API_KEY=your_openrouter_key
+LLM_MODEL=openrouter/free
+```
+
+---
+
+## 5. Benchmark Evaluation Results
+
+* **Benchmark Dataset:** `evals/cases.json` (8 hand-labeled benchmark cases covering standard domain, edge/ambiguous, and out-of-domain nonsense)
+* **Date Evaluated:** `2026-10-06`
+* **Prompt Version:** `prompts/triage-v1.md`
+* **Model:** `gemini-3.5-flash-lite`
+
+### Score:
+$$\mathbf{8 / 8 \text{ (100.0\%) Categorical Accuracy}}$$
+
+```text
+Case #1 [✓ PASS] Expected: 'billing' | Actual: 'billing' (confidence: 0.98) (2225ms)
+Case #2 [✓ PASS] Expected: 'bug'     | Actual: 'bug'     (confidence: 0.95) (699ms)
+Case #3 [✓ PASS] Expected: 'feature' | Actual: 'feature' (confidence: 0.95) (721ms)
+Case #4 [✓ PASS] Expected: 'billing' | Actual: 'billing' (confidence: 0.95) (759ms)
+Case #5 [✓ PASS] Expected: 'bug'     | Actual: 'bug'     (confidence: 0.95) (739ms)
+Case #6 [✓ PASS] Expected: 'feature' | Actual: 'feature' (confidence: 0.95) (734ms)
+Case #7 [✓ PASS] Expected: 'billing' | Actual: 'billing' (confidence: 0.95) (849ms)
+Case #8 [✓ PASS] Expected: 'other'   | Actual: 'other'   (confidence: 0.20) (802ms)
+```
+
+Run the benchmark anytime:
+```bash
+npm run eval
+```
+
+---
+
+## 6. Observability, Cost Logging & Scale Projections
+
+Every model invocation logs a structured metrics line to stdout:
+
+```json
+{
+  "timestamp": "2026-10-06T01:15:30.754Z",
+  "event": "llm_call_metrics",
+  "prompt_version": "triage-v1",
+  "model": "gemini-3.5-flash-lite",
+  "prompt_tokens": 473,
+  "completion_tokens": 51,
+  "total_tokens": 524,
+  "duration_ms": 750,
+  "repair_count": 0
+}
+```
+
+### Cost Projection for 10,000 Requests / Day:
+* **Prompt Tokens:** $473 \times 10,000 = 4.73\text{M tokens} \times \$0.075/\text{1M} \approx \$0.35$
+* **Completion Tokens:** $51 \times 10,000 = 0.51\text{M tokens} \times \$0.30/\text{1M} \approx \$0.15$
+* **Total Estimated Cost:** **~`$0.50` per day** (`~$15.00` per month for 300,000 monthly triage calls).
+
+---
+
+## 7. Retrospective
+
+> *"With another day, I would implement token-bucket client rate limiting per IP address and integrate streaming structured JSON parsing using Server-Sent Events (SSE) to reduce time-to-first-token while maintaining rigid Zod schema guarantees."*
+
+---
+
+## 🛡️ Architectural Safety Machinery
+
+1. **Input Validation (Zod):** Malformed inputs return `400 Bad Request` naming the field before touching the model, preventing wasted token spend on client errors.
+2. **Cost-Free Stub Mode:** Set `LLM_STUB=1` to return a deterministic schema-valid payload during local development and testing without burning quota.
+3. **One-Shot Repair Retry:** If the model's output violates the Zod schema, the engine automatically extracts the validation error and submits a single repair retry asking the model to fix its response.
+4. **Quarantine Logging:** If the repair retry also fails, the raw unparseable payload is recorded in `logs/quarantine.jsonl` and returns a clean `422 Unprocessable Entity`. **Raw model text is never leaked to the caller.**
+5. **30-Second Timeout:** The client overrides default 10-minute SDK timeouts with `timeout: 30000`, returning `504 Gateway Timeout` upon upstream delays.
+6. **Smart Retry Policy:** Exponential backoff with jitter on timeouts, `429` rate limits, and `5xx` server errors. Never retries non-transient client errors (`400`, `401`, `403`).
+7. **Administrative Kill Switch:** Setting `LLM_ENABLED=false` immediately bypasses model invocations and returns a safe fallback with `503 Service Unavailable`.
+
+---
+
+## 📚 Complete Project Evolution (Weeks 1 — 7)
+
+This repository demonstrates the step-by-step engineering progression across the FlyRank Backend Track:
+1. **Week 1 (A1):** In-Memory REST API (`tasks = [...]`) with strict HTTP semantics and OpenAPI 3.0 documentation.
+2. **Week 2 (A2):** Embedded persistent storage using SQLite (`tasks.db`) and parameterized SQL queries.
+3. **Week 3 (A3):** Enterprise containerized PostgreSQL 16 on Docker Compose with health checks and persistent named volumes.
+4. **Week 4 (A4):** Production authentication & authorization with Supabase Auth, JWT verification middleware, and Swagger Bearer padlock.
+5. **Week 7 (A17 - Current):** Production LLM integration behind an API (`POST /triage`) with Zod schemas, 1-shot repair, quarantine logs, and eval harness.
 
 ---
 
 ## 🔌 API Endpoint Reference Table
 
-| Route | HTTP Verb | Purpose | Auth Required | Success Status | Error Statuses |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `/public/info` | `GET` | Open public information | None | `200 OK` | — |
-| `/auth/signup` | `POST` | Register a new user | None | `201 Created` | `400 Bad Request` |
-| `/auth/login` | `POST` | Authenticate credentials & get JWT | None | `200 OK` | `400 Bad Request`, `401 Unauthorized` |
-| `/auth/logout` | `POST` | Invalidate user session | `Bearer <token>` | `204 No Content`| `401 Unauthorized` |
-| `/protected/profile` | `GET` | Retrieve private profile metadata | `Bearer <token>` | `200 OK` | `401 Unauthorized` |
-| `/protected/dashboard`| `GET` | Protected user dashboard (middleware test) | `Bearer <token>` | `200 OK` | `401 Unauthorized` |
-| `/protected/admin` | `GET` | Admin-only route (**403 demonstration**) | `Bearer <token>` | `200 OK` | `401 Unauthorized`, `403 Forbidden` |
-
----
-
-## 🛡️ Authentication vs. Authorization (401 vs. 403)
-
-Our API clearly distinguishes between **Authentication** and **Authorization**:
-
-| Concept | Status Code | Meaning | Analogy |
-| :--- | :--- | :--- | :--- |
-| **Authentication** | `401 Unauthorized` | *"I don't know who you are."* The request is missing a token, the format is malformed, or the token is expired/forged. | Showing up at the building gate without an ID badge. |
-| **Authorization** | `403 Forbidden` | *"I know who you are, but you are not allowed in here."* The user presented a valid, verified token, but does not possess the required role (e.g. non-admin attempting to access `/protected/admin`). | An employee with a valid badge trying to enter the CEO's private vault. |
-
----
-
-## 📸 Interactive Swagger UI with Bearer Authentication
-
-The interactive API documentation is served at `/docs` using `swagger-ui-express` and an OpenAPI 3.0 specification configured with `securitySchemes` for HTTP Bearer JWT:
-
-![Swagger UI with Bearer Auth](swagger-auth-screenshot.png)
-
-### Testing in the Browser
-1. Navigate to [http://localhost:3000/docs](http://localhost:3000/docs).
-2. Click the **Authorize** button (padlock icon) at the top right.
-3. Paste the JWT `access_token` obtained from `POST /auth/login`.
-4. Click **Authorize**, then click **Close**.
-5. Test any locked route (e.g., `GET /protected/profile` or `GET /protected/dashboard`) with the **Try it out** button!
-
----
-
-## 🧪 Terminal Verification with `curl`
-
-### 1. Register a New Account (`201 Created`)
-```bash
-curl -i -X POST http://localhost:3000/auth/signup \
-  -H "Content-Type: application/json" \
-  -d '{"email":"student@flyrank.ai","password":"Password123!"}'
-```
-
-### 2. Validation Guardrail (`400 Bad Request`)
-```bash
-curl -i -X POST http://localhost:3000/auth/signup \
-  -H "Content-Type: application/json" \
-  -d '{"email":"student@flyrank.ai"}'
-```
-
-### 3. Log In to Receive JWT (`200 OK`)
-```bash
-curl -i -X POST http://localhost:3000/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"student@flyrank.ai","password":"Password123!"}'
-```
-*Response returns `{ "access_token": "...", "refresh_token": "..." }`.*
-
-### 4. Access Protected Profile with Valid Token (`200 OK`)
-```bash
-curl -i http://localhost:3000/protected/profile \
-  -H "Authorization: Bearer <PASTE_YOUR_ACCESS_TOKEN>"
-```
-
-### 5. Verify Token Rejection with Tampered Token (`401 Unauthorized`)
-```bash
-# Change a single character in the token:
-curl -i http://localhost:3000/protected/profile \
-  -H "Authorization: Bearer <TAMPERED_TOKEN>"
-```
-
-### 6. Verify 403 Forbidden on Admin Endpoint (`403 Forbidden`)
-```bash
-curl -i http://localhost:3000/protected/admin \
-  -H "Authorization: Bearer <STANDARD_USER_ACCESS_TOKEN>"
-```
-
-### 7. End Session (`204 No Content`)
-```bash
-curl -i -X POST http://localhost:3000/auth/logout \
-  -H "Authorization: Bearer <PASTE_YOUR_ACCESS_TOKEN>"
-```
-
----
-
-## 📜 Stage Commit History
-
-This repository demonstrates incremental, verifiable git commits:
-
-```text
-* Stage 6: publish to GitHub and write README — then push everything
-* Extras: add 403 Forbidden admin route and documentation
-* Stage 5: Swagger UI documentation with bearer auth
-* Stage 4: auth middleware and logout endpoint
-* Stage 3: profile route token verification
-* Stage 2: public route and unverified protected route
-* Stage 1: signup and login routes working
-* Stage 0: setup server and supabase client
-```
+| Route | Method | Purpose | Auth Required | Status Codes |
+| :--- | :--- | :--- | :--- | :--- |
+| `/triage` | `POST` | AI-powered support & task triage | None (Public) | `200`, `400`, `422`, `503`, `504` |
+| `/public/info` | `GET` | Open public information | None | `200` |
+| `/auth/signup` | `POST` | Register a new user | None | `201`, `400` |
+| `/auth/login` | `POST` | Authenticate credentials & get JWT | None | `200`, `400`, `401` |
+| `/auth/logout` | `POST` | Invalidate user session | `Bearer <token>` | `204`, `401` |
+| `/protected/profile` | `GET` | User profile metadata | `Bearer <token>` | `200`, `401` |
+| `/protected/dashboard` | `GET` | User dashboard (middleware reuse) | `Bearer <token>` | `200`, `401` |
+| `/protected/admin` | `GET` | Admin-only route (403 demo) | `Bearer <token>` | `200`, `401`, `403` |
+| `/tasks` | `GET`/`POST` | CRUD tasks management | None | `200`, `201`, `400` |

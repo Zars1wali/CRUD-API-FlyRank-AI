@@ -1,0 +1,82 @@
+[
+  {
+    "id": 1,
+    "text": "I was charged twice on my credit card for invoice #INV-4920 this morning.",
+    "expected": {
+      "category": "billing",
+      "urgency": "high"
+    },
+    "type": "standard_domain",
+    "description": "Clear billing double-charge report requiring urgent resolution."
+  },
+  {
+    "id": 2,
+    "text": "The POST /tasks endpoint returns a 500 internal server error whenever title includes an emoji.",
+    "expected": {
+      "category": "bug",
+      "urgency": "high"
+    },
+    "type": "standard_domain",
+    "description": "Reproducible backend bug report causing 500 server crashes."
+  },
+  {
+    "id": 3,
+    "text": "Can you please add a CSV export button on the dashboard for all completed tasks?",
+    "expected": {
+      "category": "feature",
+      "urgency": "low"
+    },
+    "type": "standard_domain",
+    "description": "Standard feature enhancement request for data export."
+  },
+  {
+    "id": 4,
+    "text": "Where can our accounting team update our company VAT number for tax exemption?",
+    "expected": {
+      "category": "billing",
+      "urgency": "normal"
+    },
+    "type": "standard_domain",
+    "description": "Standard billing and tax configuration inquiry."
+  },
+  {
+    "id": 5,
+    "text": "Task completion toggle button does not retain state after refreshing the page on Firefox 128.",
+    "expected": {
+      "category": "bug",
+      "urgency": "normal"
+    },
+    "type": "standard_domain",
+    "description": "UI bug on a specific browser environment."
+  },
+  {
+    "id": 6,
+    "text": "It would be tremendously helpful to support global keyboard shortcuts like Cmd+K to quickly create tasks.",
+    "expected": {
+      "category": "feature",
+      "urgency": "low"
+    },
+    "type": "standard_domain",
+    "description": "UX convenience feature request."
+  },
+  {
+    "id": 7,
+    "text": "Your system failed during checkout, froze for 10 seconds, and then charged my card without creating the task order.",
+    "expected": {
+      "category": "billing",
+      "urgency": "high"
+    },
+    "type": "ambiguous_mixed",
+    "description": "Mixed category (bug + payment charge). Financial charge takes precedence."
+  },
+  {
+    "id": 8,
+    "text": "Flying purple bicycles eat fluffy clouds while whispering ancient poetry to pineapples.",
+    "expected": {
+      "category": "other",
+      "urgency": "low"
+    },
+    "type": "when_unsure_nonsense",
+    "description": "Out-of-domain nonsense text that must hit the 'when unsure' rule."
+  }
+]
