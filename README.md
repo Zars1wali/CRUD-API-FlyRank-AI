@@ -189,3 +189,36 @@ This repository demonstrates the step-by-step engineering progression across the
 | `/protected/dashboard` | `GET` | User dashboard (middleware reuse) | `Bearer <token>` | `200`, `401` |
 | `/protected/admin` | `GET` | Admin-only route (403 demo) | `Bearer <token>` | `200`, `401`, `403` |
 | `/tasks` | `GET`/`POST` | CRUD tasks management | None | `200`, `201`, `400` |
+
+---
+
+## 🤖 Bonus Stage: The AI Rematch ("AI vs Me")
+
+In accordance with Stage 6, an independent AI was prompted from memory to implement the same LLM triage endpoint in quarantine under `ai-version/src/routes/triage.js`. The implementations were compared using:
+
+```bash
+git diff --no-index src/routes/triage.js ai-version/src/routes/triage.js
+```
+
+### Prompt Used:
+> *"Create an Express.js route `POST /triage` that takes `{ text: string }` and uses the OpenAI SDK to classify customer support messages into `billing`, `bug`, `feature`, or `other` with `urgency`, `confidence`, and `reason`. Add retry logic, input validation, and return JSON."*
+
+### Reflection Questions:
+
+#### 1. What Did the AI Do Better — and Do You Actually Understand That Code?
+The AI produced an ultra-compact single file (~40 lines). It implemented a simple retry loop that was immediately readable. However, its brevity came at the expense of production safety: it lacked error differentiation, structured schema validation, and quarantine logging.
+
+#### 2. What Did It Get Wrong or Silently Ignore From Your Prompt?
+- **Ten-Minute Default Timeout Left in Place:** The AI did not configure an explicit client timeout on `new OpenAI()`, allowing slow calls to hang Express connections for up to 10 minutes.
+- **Blind Retries on HTTP 401/403:** The AI wrapped the call in a generic `for (let attempt = 0; attempt < 3; attempt++)` loop. If an API key is unauthorized (`401`), it blindly retries three times, burning quota on non-transient errors.
+- **No Schema Enforcement or Repair:** The AI relied on raw `JSON.parse()`. If the model wrapped output in markdown code fences or emitted an invalid category enum, it threw a 500 error instead of attempting a 1-shot repair or logging to `logs/quarantine.jsonl`.
+- **System Prompt Hardcoding:** The prompt was hardcoded as an inline string in the route, making it impossible to version-control or diff independently.
+
+#### 3. What Did Your Prompt Forget to Specify — and What Did the AI Decide For You?
+- The prompt said "add input validation," but didn't mandate Zod or Pydantic. The AI settled for a minimal truthy check `if (!text)`, allowing empty strings and non-string types through.
+- The prompt omitted kill switch and caching specifications, which the AI silently ignored entirely.
+
+#### The Rematch Prompt & One-Sentence Difference:
+> *"Refactored prompt to mandate Zod schema validation, explicit 30s client timeout, non-retriable 401/403 handling, versioned markdown prompt loading, and a 1-shot repair loop with quarantine logging."*  
+> **What Changed:** With explicit failure modes and schema constraints defined in the prompt, the second generation properly separated prompt files, handled timeouts gracefully, and never retried fatal authentication errors.
+
