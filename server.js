@@ -17,6 +17,8 @@ app.use((err, req, res, next) => {
 });
 
 
+const triageRouter = require("./src/routes/triage");
+
 app.get("/", (req, res) => {
   res.json({
     name: "CRUD API FlyRank AI",
@@ -32,9 +34,13 @@ app.get("/", (req, res) => {
       "/public/info",
       "/protected/profile",
       "/protected/dashboard",
+      "/triage",
     ],
   });
 });
+
+app.use("/triage", triageRouter);
+
 
 // --- Stage 1: Open auth: Sign Up & Log In ---
 app.post("/auth/signup", async (req, res) => {
