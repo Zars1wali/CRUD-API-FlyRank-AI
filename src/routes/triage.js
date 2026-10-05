@@ -2,6 +2,7 @@ const express = require("express");
 const { TriageInputSchema, STUB_OUTPUT } = require("../llm/schema");
 const { callModel, logCostMetrics } = require("../llm/service");
 const { parseAndValidate, runRepairAttempt, logToQuarantine } = require("../llm/repair");
+const { getCachedResponse, setCachedResponse } = require("../llm/cache");
 
 const router = express.Router();
 
@@ -36,13 +37,20 @@ router.post("/", async (req, res) => {
     return res.status(200).json(STUB_OUTPUT);
   }
 
+  // 4. In-Memory Request Cache: Return saved answer on duplicate requests
+  const cachedData = getCachedResponse("triage-v1", req.body.text);
+  if (cachedData) {
+    return res.status(200).json({ ...cachedData, cached: true });
+  }
+
   try {
-    // 4. Initial Model Call with explicit timeout and retry policy
+    // 5. Initial Model Call with explicit timeout and retry policy
     const initialCall = await callModel(req.body.text);
     const firstValidation = parseAndValidate(initialCall.content);
 
-    // If initial output satisfies schema, log cost and return 200
+    // If initial output satisfies schema, cache, log cost, and return 200
     if (firstValidation.success) {
+      setCachedResponse("triage-v1", req.body.text, firstValidation.data);
       logCostMetrics({
         model: initialCall.model,
         promptVersion: "triage-v1",
@@ -53,7 +61,9 @@ router.post("/", async (req, res) => {
       return res.status(200).json(firstValidation.data);
     }
 
-    // 5. Repair Retry (Exactly once)
+    // 6. Repair Retry (Exactly once)
+
+
     const repairCall = await runRepairAttempt(
       req.body.text,
       initialCall.content,
